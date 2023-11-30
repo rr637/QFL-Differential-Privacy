@@ -346,11 +346,7 @@ def client_update(client_model, optimizer, train_loader, epoch, index, r):
                     #
                     microbatch_data, microbatch_target = microbatch_data.to(
                         device), microbatch_target.to(device)
-                    #                     print(microbatch_data.dtype, microbatch_target.dtype)
-                    #                     if (params['useGpu'] and not microbatch_data.is_cuda):
-                    #                         print("moving microbatch to cuda...")
-                    #                         microbatch_data = microbatch_data.cuda()
-                    #                         microbatch_target = microbatch_target.cuda()
+        
                     optimizer.zero_microbatch_grad()
                     output = client_model(microbatch_data)
                     criterion = nn.CrossEntropyLoss()
@@ -375,8 +371,7 @@ def client_update(client_model, optimizer, train_loader, epoch, index, r):
                 #                 client_model.update_l2_norm_list(optimizer, isDP=True)
                 optimizer.zero_grad()
 
-                # correct += output.eq(target.view_as(output)).sum().item()
-            # acc = correct / len(client_test_loader.dataset)
+                
             mini_avg = sum(acc_mini) / len(acc_mini)
             acc_list.append(mini_avg)
             loss_list.append(loss.item())
