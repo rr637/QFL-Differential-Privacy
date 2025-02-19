@@ -8,7 +8,6 @@ import torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-# import NonFed
 from torchvision import datasets, transforms
 from torch.utils.data.dataset import Dataset
 from pyvacy import optim, analysis, sampling
@@ -17,8 +16,6 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from torchvision import models
 from metaquantum.CircuitComponents import VariationalQuantumClassifierInterBlock_M_IN_N_OUT
-# torch.set_default_tensor_type(torch.DoubleTensor)
-# print(np.__version__)
 from torch.autograd import Variable
 from sklearn.metrics import accuracy_score
 from torch import tensor
@@ -26,13 +23,16 @@ import csv
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 import pennylane as qml
-import torch.multiprocessing as mps
+import torch.multiprocessing as mp
+
 
 dtype = torch.cuda.DoubleTensor if torch.cuda.is_available() else torch.DoubleTensor
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 qdevice = "default.qubit"
 # torch.backends.cudnn.benchmark=True
+
+# VQC Class Definition and Initialization
 
 class VariationalQuantumClassifierInterBlock_M_IN_N_OUT:
 	def __init__(
@@ -68,7 +68,6 @@ class VariationalQuantumClassifierInterBlock_M_IN_N_OUT:
 		else:
 			self.dev = qml.device(self.qdevice, wires = num_of_wires)
 
-		
 
 	def set_params(self, var_Q_circuit, var_Q_bias):
 		self.var_Q_circuit = var_Q_circuit
@@ -85,7 +84,6 @@ class VariationalQuantumClassifierInterBlock_M_IN_N_OUT:
 		Args:
 			a: feature vector of rad and rad_square => np.array([rad_X_0, rad_X_1, rad_square_X_0, rad_square_X_1])
 		"""
-		
 
 		if self.hadamard_gate == True:
 			for i in range(self.num_of_input):
@@ -103,7 +101,7 @@ class VariationalQuantumClassifierInterBlock_M_IN_N_OUT:
 
 		"""
 
-		
+
 		# Entanglement Layer
 
 		for i in range(self.num_of_wires):
@@ -122,7 +120,7 @@ class VariationalQuantumClassifierInterBlock_M_IN_N_OUT:
 		@qml.qnode(self.dev, interface='torch')
 		def _circuit(var_Q_circuit, angles):
 			"""The circuit of the variational classifier."""
-			
+		
 			self._statepreparation(angles)
 
 			weights = var_Q_circuit
@@ -130,6 +128,7 @@ class VariationalQuantumClassifierInterBlock_M_IN_N_OUT:
 			for W in weights:
 				self._layer(W)
 
+			
 			return [qml.expval(qml.PauliZ(k)) for k in range(self.num_of_output)]
 
 		return _circuit(self.var_Q_circuit, angles)
@@ -143,19 +142,25 @@ class VariationalQuantumClassifierInterBlock_M_IN_N_OUT:
 		raw_output = self.circuit(angles)
 
 		
+		
 		return raw_output
 
 	def forward(self, angles):
-		
+	
 		fw = self._forward(angles)
 		return fw
 
+dtype = torch.cuda.DoubleTensor if torch.cuda.is_available() else torch.DoubleTensor
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-params = {'isQuantum': True, 'usePyvacy': True, 'useGpu': True,
-          'epochs': 1, 'delta': 1e-05, 'l2_clip': 0.1,
-          'l2_penalty': 0.001, 'lr': 0.02, 'micro_bs': 16, 'mini_bs': 128, 'noise': 1.0, 'noise_min': 1.0,
-          'noise_max': 5.5, 'noise_incr': 0.5, 'rounds': 4, 'selected': 5, 'clients': 100, 'runs': 6,
-          'eps_vs_acc': True, 'optimizer': 'SGD'}
+qdevice = "default.qubit"
+
+params = {'isQuantum': True, 'usePyvacy': True, 'useGpu': True, 
+         'epochs': 1, 'delta': 1e-05,'l2_clip': 0.1, 
+          'l2_penalty': 0.001,'lr': 0.02, 'micro_bs': 16, 'mini_bs': 128, 'noise':1.5, 'noise_min' : 1.5,
+          'noise_max':2.0, 'noise_incr' : 0.5, 'rounds': 1, 'selected': 5,'clients':100, 'runs':1, 
+         'eps_vs_acc': True, 'optimizer': 'SGD'}
+
 
 vqc = VariationalQuantumClassifierInterBlock_M_IN_N_OUT(
     num_of_input=4,
@@ -168,10 +173,14 @@ vqc = VariationalQuantumClassifierInterBlock_M_IN_N_OUT(
 )
 
 
+
+# PyTorch Wrapper class for VQC
+    
 class VQCTorch(nn.Module):
     def __init__(self):
         super().__init__()
 
+        
         self.q_params = nn.Parameter(0.01 * torch.randn(2, 4, 3))
 
     def get_angles_atan(self, in_x):
@@ -192,7 +201,7 @@ class VQCTorch(nn.Module):
             # print(q_out_elem)
 
             clamp = 1e-9
-
+            
             # pdb.set_trace()
             normalized_output = torch.clamp(torch.stack(q_out_elem), min=clamp)
             score_batch.append(normalized_output)
@@ -201,6 +210,7 @@ class VQCTorch(nn.Module):
 
         return scores
 
+# Data loading 
 
 data_transforms = {
     'train': transforms.Compose([
@@ -220,19 +230,14 @@ data_transforms = {
 
 ####
 print(device)
-# if device == 'cpu':
-data_dir = '/global/u2/r/rr637/QPPAI-FL/data/'
-# else:
-#     data_dir = '/Users/rodrofougaran/Downloads/QPPAI-FL/dogs_vs_cats_processed/'
 
-# CHECK_POINT_PATH = 'checkpoint.tar'
-# SUBMISSION_FILE = 'submission.csv'
+data_dir = '/global/u2/r/rr637/QPPAI-FL/data/'
+
+
 image_datasets = {x: datasets.ImageFolder(os.path.join(
     data_dir, x), data_transforms[x]) for x in ['train', 'val']}
 
-# dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4,
-# 											  shuffle=True, num_workers=4)
-# 			  for x in ['train', 'val']}
+
 
 dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
 class_names = image_datasets['train'].classes
@@ -241,9 +246,6 @@ print(class_names)
 print(f"Train image size: {dataset_sizes['train']}")
 print(f'Validation image size: {dataset_sizes["val"]}')
 ####
-# # Loading CIFAR10 using torchvision.datasets
-# traindata = datasets.CIFAR10('./data', train=True, download=True,
-# 					   transform= transform_train)
 
 # Dividing the training data into num_clients, with each client having equal number of images
 
@@ -252,13 +254,12 @@ client_train_size = int(dataset_sizes['train'] / params['clients'])
 print(f"client_train_size: {client_train_size}")
 
 if params['usePyvacy']:
-    epsilon = analysis.epsilon(dataset_sizes['train'], params['mini_bs'],
-                               params['noise'], params['rounds'], params['delta'])
+    epsilon = analysis.epsilon(dataset_sizes['train'],params['mini_bs'],
+                                    params['noise'], params['rounds'],params['delta'])
     params['epsilon'] = epsilon
-
+    
     print(epsilon)
-# print(image_datasets)
-# traindata_split = torch.utils.data.random_split(traindata, [int(traindata.data.shape[0] / num_clients) for _ in range(num_clients)])
+
 traindata_split = torch.utils.data.random_split(traindata,
                                                 [client_train_size for _ in range(params['clients'])])
 
@@ -266,17 +267,14 @@ traindata_split = torch.utils.data.random_split(traindata,
 train_loader = [torch.utils.data.DataLoader(
     x, batch_size=params['mini_bs'], shuffle=True) for x in traindata_split]
 
-# # # Normalizing the test images
-# # transform_test = transforms.Compose([
-# # 	transforms.ToTensor(),
-# # 	transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-# # ])
+
 
 # Loading the test iamges and thus converting them into a test_loader
 testdata = image_datasets['val']
 test_loader = torch.utils.data.DataLoader(
     testdata, batch_size=params['mini_bs'], shuffle=True)
 
+# Hybrid Quantum-Classical model and becnhmark fully classical
 
 class QuantumTransfer(nn.Module):
     def __init__(self):
@@ -297,7 +295,6 @@ class QuantumTransfer(nn.Module):
     def forward(self, in_x):
         return self.net(in_x)
 
-
 class ClassicalTransfer(nn.Module):
     def __init__(self):
         super().__init__()
@@ -316,10 +313,15 @@ class ClassicalTransfer(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(in_features=4, out_features=2, bias=True),
         )
+            
 
     def forward(self, in_x):
         return self.net(in_x)
 
+
+
+    
+# Differentially privacte local update
 
 def client_update(client_model, optimizer, train_loader, epoch, index, r):
     """
@@ -329,62 +331,70 @@ def client_update(client_model, optimizer, train_loader, epoch, index, r):
     client_model.train()
     client_model = client_model.to(device)
     loss_list = []
-    acc_list = []
+    acc_list =[]
     if params['usePyvacy']:
-
+        
         for e in range(params['epochs']):
             print("EPOCH: ", e)
             acc_mini = []
             for batch_idx, (data, target) in enumerate(train_loader):
                 # print("BATCH IDX: ", batch_idx)
                 data, target = data.to(device), target.to(device)
-
+               
                 optimizer.zero_grad()
                 acc_micro = []
                 for microbatch_idx, (microbatch_data, microbatch_target) in enumerate(
                         zip(data.split(optimizer.microbatch_size), target.split(optimizer.microbatch_size))):
-                    #
+#                    
                     microbatch_data, microbatch_target = microbatch_data.to(
                         device), microbatch_target.to(device)
-        
-                    optimizer.zero_microbatch_grad()
+#                     
+                    optimizer.zero_microbatch_grad() 
                     output = client_model(microbatch_data)
                     criterion = nn.CrossEntropyLoss()
-                    #
+#        
                     loss = criterion(output, microbatch_target)
-
+                    
                     # print("WithDP-Loss: ", loss.item())
-
+                   
                     loss.backward()
-                    #                     client_model.update_l2_norm_list(optimizer, isDP=False)
+#                     client_model.update_l2_norm_list(optimizer, isDP=False)
                     optimizer.microbatch_step()
                     preds = torch.argmax(output, dim=1).to(device)
                     # print(f"Shape of target: {microbatch_target.shape} and preds: {preds.shape}", microbatch_target, preds)
-
+                    
                     accuracy = accuracy_score(microbatch_target.cpu().numpy(), preds.cpu().numpy())
                     acc_micro.append(accuracy)
                     # print("Accuracy = {}".format(accuracy))
-
-                micro_avg = sum(acc_micro) / len(acc_micro)
+                    
+                    
+            
+            
+                    
+                    
+                micro_avg = sum(acc_micro)/len(acc_micro)
                 acc_mini.append(micro_avg)
                 optimizer.step()
-                #                 client_model.update_l2_norm_list(optimizer, isDP=True)
+#                 client_model.update_l2_norm_list(optimizer, isDP=True)
                 optimizer.zero_grad()
-
                 
-            mini_avg = sum(acc_mini) / len(acc_mini)
+            
+                
+            mini_avg = sum(acc_mini)/len(acc_mini)
             acc_list.append(mini_avg)
             loss_list.append(loss.item())
-
+            
+        
+            
             print(f"Loss per epoch: {loss.item()}")
             print(f"Epoch {e} Accuracy: {mini_avg}")
-
+                
     else:
-
+            
         for e in range(epoch):
             acc_mini = []
-            print("Client: ", index + 1)
-            acc_mini = []
+            print("Client: ",index+1)
+            acc_mini=[]
             for batch_idx, (data, target) in enumerate(train_loader):
                 # print("BATCH IDX: ", batch_idx)
                 data, target = data.to(device), target.to(device)
@@ -401,32 +411,35 @@ def client_update(client_model, optimizer, train_loader, epoch, index, r):
                 accuracy = accuracy_score(target.cpu().numpy(), preds.cpu().numpy())
                 print(f"accuracy_per_mini: {accuracy}")
                 acc_mini.append(accuracy)
-
+        
+            
             print(f"Loss per epoch: {loss.item()}")
             print(f"acc_mini_list: {acc_mini}")
-            mini_avg = sum(acc_mini) / len(acc_mini)
+            mini_avg = sum(acc_mini)/len(acc_mini)
             print(f"Epoch {e} Accuracy: {mini_avg}")
             acc_list.append(mini_avg)
             loss_list.append(loss.item())
-    avg_acc = sum(acc_list) / params['epochs']
+    avg_acc = sum(acc_list)/params['epochs']
     return loss.item(), avg_acc
 
+#Local model aggregation and sharing of global model
 
 def server_aggregate(global_model, client_models):
     """
     This function has aggregation method 'mean'
     """
     ### This will take simple mean of the weights of models ###
-
+   
     global_dict = global_model.state_dict()
     for k in global_dict.keys():
-        global_dict[k] = torch.stack([client_models[i].state_dict()[k].float() for i in range(len(client_models))],
-                                     0).mean(0)
-        # print(client_models[i].state_dict()[k].float())
+            global_dict[k] = torch.stack([client_models[i].state_dict()[k].float() for i in range(len(client_models))],
+                                        0).mean(0)
     global_model.load_state_dict(global_dict)
     for model in client_models:
+            
         model.load_state_dict(global_model.state_dict())
 
+#Testing
 
 def test(global_model, test_loader):
     """This function test the global model on test data and returns test loss and test accuracy """
@@ -450,6 +463,7 @@ def test(global_model, test_loader):
     acc = correct / len(test_loader.dataset)
 
     return test_loss, acc
+
 
 
 def saving_and_plotting(time, model_lists, ltr_lists, lt_lists, at_lists, atr_lists, params):
@@ -524,6 +538,7 @@ def plot_acc_loss(tr_a, tr_l, t_a, t_l, is_Quantum, exp_name, title, i):
     plt.savefig(f"Results/Exp:_{exp_name}/Plots/Acc_loss_plot_{i}.png"),
     plt.show()
 
+#Main QFL-DP Training
 
 def main(params):
     if params['isQuantum']:
@@ -601,6 +616,8 @@ def main(params):
 
     return final_dict
 
+
+#Script for running experiments
 
 exp_index = datetime.now().strftime("%m_%d_%H_%M_%S")
 if not params['eps_vs_acc']:
